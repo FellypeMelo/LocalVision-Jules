@@ -18,7 +18,7 @@ class LLM_Manager:
             model_identifier (str): The identifier for the model to use.
             base_url (str): The base URL of the LM Studio server.
         """
-        self.client = Client(base_url=base_url)
+        self.client = Client()
         self.model_identifier = model_identifier
 
     def _image_to_base64(self, image_path):
@@ -76,20 +76,18 @@ class LLM_Manager:
                 # Construct the message history for the model
                 for interaction in conversation_history:
                     role = "user" if interaction['actor'] == 'user' else "assistant"
-                    content = []
 
-                    if interaction['type'] == 'text':
-                        content.append({"type": "text", "text": interaction['content']})
+                    if interaction['type'] == 'text' or interaction['type'] == 'description':
+                        # For text and description, content is a simple string
+                        messages.append({"role": role, "content": interaction['content']})
                     elif interaction['type'] == 'image':
+                        # For images, content is a list of parts
                         img_base64 = self._image_to_base64(interaction['image_path'])
-                        content.append({"type": "text", "text": "Here is an image."}) # Placeholder text
-                        content.append({"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_base64}"}})
-                    elif interaction['type'] == 'description':
-                        # The system's description is a response from the assistant
-                        content.append({"type": "text", "text": interaction['content']})
-
-                    if content:
-                         messages.append({"role": role, "content": content})
+                        content = [
+                            {"type": "text", "text": "Here is an image."}, # Placeholder text
+                            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_base64}"}}
+                        ]
+                        messages.append({"role": role, "content": content})
 
                 # Add the new user message
                 messages.append({"role": "user", "content": message})
