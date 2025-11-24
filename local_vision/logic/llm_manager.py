@@ -1,62 +1,74 @@
-from lmstudio import Client
-from PIL import Image
-import base64
-from io import BytesIO
+import lmstudio as lms
 import threading
 import queue
+import logging
 
 class LLM_Manager:
     """
-    Manages interactions with the LM Studio local server, including
-    image description generation and contextual chat in separate threads.
+    Manages interactions with the LM Studio local server using the native lmstudio SDK.
     """
     def __init__(self, model_identifier="local-model", base_url="http://localhost:1234/v1"):
         """
         Initializes the LLM_Manager.
-
-        Args:
-            model_identifier (str): The identifier for the model to use.
-            base_url (str): The base URL of the LM Studio server.
         """
-        self.client = Client()
-        self.model_identifier = model_identifier
+        # Extract host:port from base_url
+        # The SDK expects just "host:port" format
+        host_port = base_url.replace("http://", "").replace("https://", "").replace("/v1", "").strip()
+        
+        logging.debug(f"LLM_Manager: Connecting to {host_port}")
+        self.client = lms.Client(api_host=host_port)
+        
+        logging.debug(f"LLM_Manager: Getting model {model_identifier}")
+        # Use the convenience method which auto-discovers loaded models
+        self.model = self.client.llm.model(model_identifier)
 
-    def _image_to_base64(self, image_path):
-        """Converts an image file to a base64 encoded string."""
-        with Image.open(image_path) as img:
-            buffered = BytesIO()
-            img.save(buffered, format="PNG")
-            return base64.b64encode(buffered.getvalue()).decode('utf-8')
+    def _execute_with_retry(self, func, *args, **kwargs):
+        """
+        Executes a function with retry logic for connection errors.
+        """
+        max_retries = 3
+        import time
+        
+        for attempt in range(max_retries):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                # Check for connection-related errors
+                error_str = str(e).lower()
+                if "econnreset" in error_str or "connection" in error_str or "timeout" in error_str:
+                    logging.warning(f"Connection error (attempt {attempt+1}/{max_retries}): {e}")
+                    if attempt < max_retries - 1:
+                        time.sleep(1 * (attempt + 1)) # Exponential backoff
+                        # Try to reconnect client
+                        try:
+                            host_port = self.client.api_host
+                            self.client = lms.Client(api_host=host_port)
+                            self.model = self.client.llm.model(self.model.identifier)
+                        except:
+                            pass
+                        continue
+                raise e
 
     def get_image_description(self, image_path, result_queue):
         """
         Generates a description for an image in a separate thread.
-
-        Args:
-            image_path (str): The path to the image file.
-            result_queue (queue.Queue): The queue to put the result in.
         """
         def worker():
             try:
-                img_base64 = self._image_to_base64(image_path)
+                def _task():
+                    chat = lms.Chat("You are an image analysis assistant.")
+                    image_handle = self.client.prepare_image(src=image_path)
+                    chat.add_user_message([
+                        "Describe this image in detail.",
+                        image_handle
+                    ])
+                    return self.model.respond(chat)
 
-                completion = self.client.chat.completions.create(
-                    model=self.model_identifier,
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": [
-                                {"type": "text", "text": "Describe this image in detail."},
-                                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_base64}"}},
-                            ],
-                        }
-                    ],
-                    max_tokens=1000,
-                )
-                description = completion.choices[0].message.content
+                result = self._execute_with_retry(_task)
+                description = result.content
                 result_queue.put({"type": "description", "content": description})
             except Exception as e:
-                result_queue.put({"type": "error", "content": f"Error: {e}"})
+                result_queue.put({"type": "error", "content": f"An unexpected error occurred: {e}"})
 
         thread = threading.Thread(target=worker)
         thread.start()
@@ -64,43 +76,47 @@ class LLM_Manager:
     def get_text_response(self, message, conversation_history, result_queue):
         """
         Generates a contextual text response based on the conversation history.
-
-        Args:
-            message (str): The user's new text message.
-            conversation_history (list): A list of previous interaction dicts.
-            result_queue (queue.Queue): The queue to put the result in.
         """
         def worker():
             try:
-                messages = []
-                # Construct the message history for the model
-                for interaction in conversation_history:
-                    role = "user" if interaction['actor'] == 'user' else "assistant"
+                def _task():
+                    # The system prompt can be set at the start
+                    chat = lms.Chat("You are a helpful AI assistant.")
 
-                    if interaction['type'] == 'text' or interaction['type'] == 'description':
-                        # For text and description, content is a simple string
-                        messages.append({"role": role, "content": interaction['content']})
-                    elif interaction['type'] == 'image':
-                        # For images, content is a list of parts
-                        img_base64 = self._image_to_base64(interaction['image_path'])
-                        content = [
-                            {"type": "text", "text": "Here is an image."}, # Placeholder text
-                            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_base64}"}}
-                        ]
-                        messages.append({"role": role, "content": content})
+                    # Reconstruct the chat history using the lmstudio Chat object
+                    for interaction in conversation_history:
+                        actor = interaction['actor']
+                        content = interaction['content']
 
-                # Add the new user message
-                messages.append({"role": "user", "content": message})
+                        if actor == 'user':
+                            if interaction['type'] == 'image':
+                                # If there's an image in the history, prepare it and add it
+                                try:
+                                    image_handle = self.client.prepare_image(src=interaction['image_path'])
+                                    # The original prompt for the image might be in the 'content'
+                                    prompt = content if isinstance(content, str) and content else "Here is the image again."
+                                    chat.add_user_message([prompt, image_handle])
+                                except:
+                                    # Fallback if image file is missing
+                                    chat.add_user_message("[Image missing] " + str(content))
+                            else:
+                                chat.add_user_message(content)
+                        elif actor == 'assistant':
+                            # The content of an assistant can be a description or text response
+                            if interaction['type'] == 'description' or interaction['type'] == 'text_response':
+                                 chat.add_assistant_response(content)
 
-                completion = self.client.chat.completions.create(
-                    model=self.model_identifier,
-                    messages=messages,
-                    max_tokens=500,
-                )
-                response = completion.choices[0].message.content
+                    # Add the new user message
+                    chat.add_user_message(message)
+
+                    # Get the response
+                    return self.model.respond(chat)
+
+                result = self._execute_with_retry(_task)
+                response = result.content
                 result_queue.put({"type": "text_response", "content": response})
             except Exception as e:
-                result_queue.put({"type": "error", "content": f"Error: {e}"})
+                result_queue.put({"type": "error", "content": f"An unexpected error occurred: {e}"})
 
         thread = threading.Thread(target=worker)
         thread.start()

@@ -12,6 +12,7 @@ from tkinterdnd2 import DND_FILES, TkinterDnD
 from local_vision.logic.llm_manager import LLM_Manager
 from local_vision.data.history_manager import HistoryManager
 from local_vision.logic.image_processor import ImageProcessor
+from local_vision.logic.tts_manager import TTSManager
 
 
 # Apply the theme as soon as the app starts
@@ -34,6 +35,7 @@ class LoginWindow(ctk.CTkToplevel):
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
         self.nickname = None
+        self.tts = TTSManager()
 
         self.label = ctk.CTkLabel(self, text="Please enter your nickname:")
         self.label.pack(pady=10)
@@ -41,14 +43,21 @@ class LoginWindow(ctk.CTkToplevel):
         self.entry = ctk.CTkEntry(self)
         self.entry.pack(pady=5)
         self.entry.bind("<Return>", self._on_submit)
+        
+        # Accessibility bindings
+        self.entry.bind("<FocusIn>", lambda e: self.tts.speak("Enter your nickname"))
 
         self.button = ctk.CTkButton(self, text="Start", command=self._on_submit)
         self.button.pack(pady=10)
+        self.button.bind("<FocusIn>", lambda e: self.tts.speak("Start button"))
 
         self.error_label = ctk.CTkLabel(self, text="", text_color="red")
         self.error_label.pack()
 
         self.entry.focus()
+        
+        # Speak welcome message
+        self.after(500, lambda: self.tts.speak("Welcome to Local Vision. Please enter your nickname and press Enter."))
 
     def _on_submit(self, event=None):
         nickname = self.entry.get().strip()
@@ -56,7 +65,9 @@ class LoginWindow(ctk.CTkToplevel):
             self.nickname = nickname
             self.destroy()
         else:
-            self.error_label.configure(text="Nickname cannot be empty.")
+            error_msg = "Nickname cannot be empty."
+            self.error_label.configure(text=error_msg)
+            self.tts.speak(error_msg)
 
     def _on_close(self):
         """Handles the window close event."""
@@ -149,12 +160,14 @@ class HistoryWindow(ctk.CTkToplevel):
                 command=lambda c=conv_id: self.load_selected_conversation(c)
             )
             button.pack(side="left", fill="x", expand=True, padx=(0, 5))
+            button.bind("<FocusIn>", lambda e, t=btn_text: self.main_app.tts.speak(f"Conversation: {t}"))
 
             delete_button = ctk.CTkButton(
                 frame, text="Delete", width=80, fg_color="red",
                 command=lambda c=conv_id: self.delete_selected_conversation(c)
             )
             delete_button.pack(side="right")
+            delete_button.bind("<FocusIn>", lambda e: self.main_app.tts.speak("Delete button"))
 
     def load_selected_conversation(self, conversation_id):
         """Tells the main app to load the selected conversation."""
@@ -191,8 +204,19 @@ class SettingsWindow(ctk.CTkToplevel):
         self.current_model_label = ctk.CTkLabel(self.model_frame, text=f"Current Model: {self.main_app.model_identifier}", wraplength=480)
         self.current_model_label.pack(pady=5)
 
-        self.select_model_button = ctk.CTkButton(self.model_frame, text="Select Model", command=self.select_model)
-        self.select_model_button.pack(pady=10)
+        # --- New model entry ---
+        self.model_entry_frame = ctk.CTkFrame(self.model_frame)
+        self.model_entry_frame.pack(pady=10, fill="x", padx=10)
+
+        self.model_entry = ctk.CTkEntry(self.model_entry_frame, placeholder_text="Enter model identifier (e.g., org/repo)")
+        self.model_entry.insert(0, self.main_app.model_identifier)
+        self.model_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
+        self.model_entry.bind("<FocusIn>", lambda e: self.main_app.tts.speak("Model identifier input"))
+
+        self.save_model_button = ctk.CTkButton(self.model_entry_frame, text="Save", width=80, command=self.save_model_identifier)
+        self.save_model_button.pack(side="left")
+        self.save_model_button.bind("<FocusIn>", lambda e: self.main_app.tts.speak("Save model button"))
+
 
         # --- Accessibility ---
         self.accessibility_frame = ctk.CTkFrame(self)
@@ -205,6 +229,7 @@ class SettingsWindow(ctk.CTkToplevel):
                                             command=self.change_theme)
         self.theme_menu.set(self.main_app.theme.capitalize())
         self.theme_menu.pack(pady=10)
+        self.theme_menu.bind("<FocusIn>", lambda e: self.main_app.tts.speak("Theme menu"))
 
         self.font_frame = ctk.CTkFrame(self.accessibility_frame)
         self.font_frame.pack(pady=5)
@@ -214,22 +239,62 @@ class SettingsWindow(ctk.CTkToplevel):
 
         self.decrease_font_button = ctk.CTkButton(self.font_frame, text="-", width=30, command=self.main_app.decrease_font_size)
         self.decrease_font_button.pack(side="left")
+        self.decrease_font_button.bind("<FocusIn>", lambda e: self.main_app.tts.speak("Decrease font size button"))
 
         self.increase_font_button = ctk.CTkButton(self.font_frame, text="+", width=30, command=self.main_app.increase_font_size)
         self.increase_font_button.pack(side="left", padx=5)
+        self.increase_font_button.bind("<FocusIn>", lambda e: self.main_app.tts.speak("Increase font size button"))
 
+        # --- Voice Settings ---
+        self.voice_frame = ctk.CTkFrame(self.accessibility_frame)
+        self.voice_frame.pack(pady=10, fill="x")
+        
+        self.voice_label = ctk.CTkLabel(self.voice_frame, text="Text-to-Speech:")
+        self.voice_label.pack(side="left", padx=5)
+        
+        self.voice_switch = ctk.CTkSwitch(self.voice_frame, text="Enable Voice", command=self.toggle_voice)
+        # Check current state (assuming TTSManager is singleton)
+        from local_vision.logic.tts_manager import TTSManager
+        if TTSManager().is_running:
+            self.voice_switch.select()
+        else:
+            self.voice_switch.deselect()
+        self.voice_switch.pack(side="right", padx=5)
+        self.voice_switch.bind("<FocusIn>", lambda e: self.main_app.tts.speak("Voice toggle switch"))
 
-    def select_model(self):
-        """Opens a file dialog to select a model."""
-        filepath = filedialog.askopenfilename(title="Select a model file")
-        if filepath:
-            self.main_app.update_model_identifier(filepath)
-            self.current_model_label.configure(text=f"Current Model: {filepath}")
+    def toggle_voice(self):
+        """Toggles the TTS engine."""
+        from local_vision.logic.tts_manager import TTSManager
+        tts = TTSManager()
+        if self.voice_switch.get():
+            tts.is_running = True
+            tts.speak("Voice enabled")
+        else:
+            tts.speak("Voice disabled")
+            pass 
+
+    def save_model_identifier(self):
+        """Saves the new model identifier from the entry field."""
+        new_identifier = self.model_entry.get().strip()
+        if new_identifier:
+            self.main_app.update_model_identifier(new_identifier)
+            self.current_model_label.configure(text=f"Current Model: {new_identifier}")
+            # Optional: Add a success message or close the window
+            # For now, just updating the label is enough feedback.
 
     def change_theme(self, new_theme):
         """Changes the application theme."""
         self.main_app.update_theme(new_theme.lower())
 
+
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%H:%M:%S'
+)
 
 class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper):
     """
@@ -244,6 +309,9 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper):
 
         self.history_manager = history_manager
         self.conversation_id = None
+        
+        # Initialize TTS
+        self.tts = TTSManager()
 
         self._load_config()
 
@@ -251,27 +319,83 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper):
         self.drop_target_register(DND_FILES)
         self.dnd_bind('<<Drop>>', self._on_drop)
 
+        logging.info("Starting initialization...")
         self.withdraw() # Hide the main window initially
 
         # Session Management
+        logging.debug("Prompting for nickname...")
         self.nickname = self._prompt_for_nickname()
         if not self.nickname:
+            logging.info("No nickname provided, exiting...")
             return # Exit if no nickname was provided
 
+        logging.info(f"Got nickname: {self.nickname}")
         self._start_new_conversation()
 
+        logging.debug("Creating widgets...")
+        try:
+            self._create_widgets()
+            logging.debug("Widgets created successfully")
+        except Exception as e:
+            logging.error(f"Error creating widgets: {e}", exc_info=True)
+            raise
+        
+        logging.debug("Showing window...")
         self.deiconify() # Show the main window after getting nickname
         self.title(f"Local Vision Chat - {self.nickname}")
 
-        # LLM Manager
-        self.llm_manager = LLM_Manager(model_identifier=self.model_identifier)
+        # Initialize result queue
         self.result_queue = queue.Queue()
-
-        self._create_widgets()
+        
+        # LLM Manager - initialize after UI is ready to display errors
+        self.llm_manager = None
+        logging.info("Initializing LLM Manager...")
+        try:
+            self.llm_manager = LLM_Manager(model_identifier=self.model_identifier)
+            logging.info("LLM Manager initialized successfully")
+        except Exception as e:
+            error_msg = f"Failed to connect to LM Studio: {e}\n\nPlease ensure LM Studio is running and a model is loaded."
+            self._add_message(f"System Error: {error_msg}", is_system=True)
+            logging.error(f"LLM initialization error: {e}", exc_info=True)
 
         # Start checking the queue
+        logging.debug("Starting queue check...")
         self.after(100, self._check_queue)
+        logging.debug("Updating fonts...")
         self.update_all_fonts() # Apply initial font size
+        logging.info("Initialization complete!")
+        
+        # Add window close handler
+        self.protocol("WM_DELETE_WINDOW", self._on_window_close)
+        
+        # Start heartbeat to verify mainloop is running
+        self._heartbeat_count = 0
+        self.after(1000, self._heartbeat)
+        
+    def _heartbeat(self):
+        """Periodic heartbeat to verify mainloop is running."""
+        self._heartbeat_count += 1
+        
+        # Only log if window is NOT normal or every 60 seconds
+        state = self.state()
+        if state != 'normal' or self._heartbeat_count % 60 == 0:
+            logging.debug(f"Heartbeat {self._heartbeat_count} - Window state: {state}, Visible: {self.winfo_viewable()}")
+        
+        # Check if window is withdrawn but should be visible
+        if state == 'withdrawn':
+            logging.warning("Window is withdrawn! Attempting to show...")
+            self.deiconify()
+        
+        # Reschedule
+        try:
+            self.after(1000, self._heartbeat)
+        except Exception as e:
+            logging.error(f"Heartbeat failed: {e}")
+        
+    def _on_window_close(self):
+        """Handle window close event."""
+        logging.info("Window close requested")
+        self.destroy()
 
 
     def _create_widgets(self):
@@ -295,24 +419,30 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper):
 
         self.history_button = ctk.CTkButton(self.menu_frame, text="History", width=80, command=self._open_history)
         self.history_button.pack(side="left", padx=(0,5))
+        self.history_button.bind("<FocusIn>", lambda e: self.tts.speak("History button"))
 
         self.settings_button = ctk.CTkButton(self.menu_frame, text="Settings", width=80, command=self._open_settings)
         self.settings_button.pack(side="left")
+        self.settings_button.bind("<FocusIn>", lambda e: self.tts.speak("Settings button"))
 
         self.attach_button = ctk.CTkButton(self.input_frame, text="Attach Image", width=120, command=self._on_attach_click)
         self.attach_button.grid(row=0, column=1, padx=5, pady=5, sticky="w")
+        self.attach_button.bind("<FocusIn>", lambda e: self.tts.speak("Attach Image button"))
 
         self.paste_button = ctk.CTkButton(self.input_frame, text="Paste Image", width=120, command=self._on_paste)
         self.paste_button.grid(row=0, column=1, padx=(130, 5), pady=5, sticky="w")
+        self.paste_button.bind("<FocusIn>", lambda e: self.tts.speak("Paste Image button"))
 
 
         self.text_input = ctk.CTkEntry(self.input_frame, placeholder_text="Type your message...")
         self.text_input.grid(row=0, column=1, sticky="ew", padx=(260, 5), pady=5)
         self.text_input.bind("<Return>", self._on_send_text)
+        self.text_input.bind("<FocusIn>", lambda e: self.tts.speak("Message input"))
 
 
         self.send_button = ctk.CTkButton(self.input_frame, text="Send", width=80, command=self._on_send_text)
         self.send_button.grid(row=0, column=2, padx=5, pady=5)
+        self.send_button.bind("<FocusIn>", lambda e: self.tts.speak("Send button"))
 
     def _load_config(self):
         """Loads settings from config.ini."""
@@ -345,8 +475,17 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper):
         self.model_identifier = new_identifier
         self._save_config()
         # Re-initialize the LLM_Manager with the new model
-        self.llm_manager = LLM_Manager(model_identifier=self.model_identifier)
-        print(f"Model updated to: {self.model_identifier}")
+        try:
+            self.llm_manager = LLM_Manager(model_identifier=self.model_identifier)
+            logging.info(f"Model updated to: {self.model_identifier}")
+            self._add_message(f"System: Model updated successfully to {self.model_identifier}", is_system=True)
+            self.tts.speak("Model updated successfully")
+        except Exception as e:
+            self.llm_manager = None
+            error_msg = f"Failed to connect with new model: {e}"
+            self._add_message(f"System Error: {error_msg}", is_system=True)
+            logging.error(f"Model update error: {e}")
+            self.tts.speak("Failed to update model")
 
     def update_theme(self, new_theme):
         """Updates the theme and saves it."""
@@ -366,23 +505,41 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper):
 
     def update_all_fonts(self):
         """Iterates through all widgets and updates their font size."""
-        new_font = (None, self.font_size)
-        # Update default font for new widgets
-        ctk.CTkFont(size=self.font_size)
+        try:
+            logging.debug(f"Updating fonts to size {self.font_size}")
+            new_font = (None, self.font_size)
+            # Update default font for new widgets
+            ctk.CTkFont(size=self.font_size)
 
-        # Update existing widgets
-        for widget in self.winfo_children():
-            self._update_widget_font(widget, new_font)
+            # Update existing widgets - make a copy of children list to avoid modification during iteration
+            children = list(self.winfo_children())
+            for widget in children:
+                try:
+                    self._update_widget_font(widget, new_font)
+                except Exception as e:
+                    logging.debug(f"Error updating font for widget {widget}: {e}")
+            logging.debug("Fonts updated successfully")
+        except Exception as e:
+            logging.error(f"Error in update_all_fonts: {e}", exc_info=True)
 
     def _update_widget_font(self, widget, font):
         """Recursively update font for a widget and its children."""
         try:
+            # Check if widget still exists
+            if not widget.winfo_exists():
+                return
+                
             widget.configure(font=font)
-        except:
-            pass # Widget does not have a font property
+        except Exception:
+            pass # Widget does not have a font property or was destroyed
 
-        for child in widget.winfo_children():
-            self._update_widget_font(child, font)
+        try:
+            # Make a copy of children list to avoid modification during iteration
+            children = list(widget.winfo_children())
+            for child in children:
+                self._update_widget_font(child, font)
+        except Exception as e:
+            logging.debug(f"Error iterating widget children: {e}")
 
 
     def _prompt_for_nickname(self):
@@ -405,9 +562,12 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper):
         self.text_input.delete(0, "end")
 
         # Get contextual response
-        history = self.history_manager.get_conversation_history(self.conversation_id, as_dict=True)
-        self.llm_manager.get_text_response(message, history, self.result_queue)
-        self._add_message("System: Processing...", is_system=True)
+        if self.llm_manager:
+            history = self.history_manager.get_conversation_history(self.conversation_id, as_dict=True)
+            self.llm_manager.get_text_response(message, history, self.result_queue)
+            self._add_message("System: Processing...", is_system=True)
+        else:
+            self._add_message("System Error: LLM not connected. Please check LM Studio.", is_system=True)
 
 
     def _on_attach_click(self):
@@ -467,8 +627,11 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper):
             return
 
         # Step 5: Show processing message and get description
-        self._add_message("System: Processing...", is_system=True)
-        self.llm_manager.get_image_description(filepath, self.result_queue)
+        if self.llm_manager:
+            self._add_message("System: Processing...", is_system=True)
+            self.llm_manager.get_image_description(filepath, self.result_queue)
+        else:
+            self._add_message("System Error: LLM not connected. Cannot process image.", is_system=True)
 
 
     def _check_queue(self):
@@ -478,10 +641,15 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper):
             response_type = response.get("type")
             content = response.get("content", "No content received.")
 
-            # Remove the "Processing..." message
-            self.history_frame.winfo_children()[-1].destroy()
+            # Remove the "Processing..." message if it exists
+            children = self.history_frame.winfo_children()
+            if children:
+                children[-1].destroy()
 
             self._add_message(f"System: {content}", is_system=True)
+            
+            # Speak the response
+            self.tts.speak(content)
 
             if response_type == "description":
                 self.history_manager.save_interaction(self.conversation_id, "system", "description", content=content)
@@ -493,8 +661,14 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper):
 
         except queue.Empty:
             pass # No message yet
+        except Exception as e:
+            logging.error(f"Error in _check_queue: {e}", exc_info=True)
 
-        self.after(100, self._check_queue)
+        # Always reschedule the next check
+        try:
+            self.after(100, self._check_queue)
+        except Exception as e:
+            logging.error(f"Error scheduling next queue check: {e}")
 
     def _open_history(self):
         """Opens the conversation history window."""
@@ -533,10 +707,40 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper):
             elif actor == "system":
                 self._add_message(f"System: {content}", is_system=True)
 
+    def _bind_tts_focus(self, widget, text):
+        """Helper to bind focus events for TTS announcements."""
+        def on_focus(event):
+            self.tts.speak(text)
+        
+        # Bind to the widget
+        try:
+            widget.bind("<FocusIn>", on_focus, add="+")
+        except:
+            pass
+
     def _add_message(self, message, is_system=False):
         """Adds a text message to the history frame."""
-        label = ctk.CTkLabel(self.history_frame, text=message, anchor="w", justify="left")
-        label.pack(fill="x", padx=5, pady=2)
+        # Determine colors based on system/user
+        text_color = None
+        
+        if is_system:
+            text_color = "orange" if "Error" in message else "gray"
+        
+        # Use CTkButton for accessibility
+        msg_button = ctk.CTkButton(
+            self.history_frame, 
+            text=message, 
+            anchor="w", 
+            fg_color="transparent",
+            hover_color="gray20",
+            text_color=text_color,
+            height=24,
+            command=lambda m=message: self.tts.speak(m)
+        )
+        msg_button.pack(fill="x", padx=5, pady=2)
+        
+        # Bind focus event to read the message
+        self._bind_tts_focus(msg_button, message)
 
     def _add_image(self, filepath):
         """
@@ -544,8 +748,18 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper):
         """
         ctk_image = ImageProcessor.process_and_resize(filepath)
         if ctk_image:
-            label = ctk.CTkLabel(self.history_frame, image=ctk_image, text="")
-            label.pack(padx=5, pady=5)
+            # Use CTkButton for accessibility
+            img_button = ctk.CTkButton(
+                self.history_frame, 
+                image=ctk_image, 
+                text="",
+                fg_color="transparent",
+                hover_color="gray20",
+                height=ctk_image.cget("size")[1] + 10,
+                command=lambda: self.tts.speak("Image sent")
+            )
+            img_button.pack(padx=5, pady=5)
+            self._bind_tts_focus(img_button, "Image sent")
             return True
         else:
             # As per the sequence diagram for "falha no carregamento"
@@ -556,4 +770,12 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper):
     def run(self):
         """Starts the main application loop."""
         if self.nickname:
-            self.mainloop()
+            try:
+                logging.info("Starting mainloop...")
+                self.mainloop()
+                logging.info("Mainloop exited normally")
+            except Exception as e:
+                logging.critical(f"FATAL ERROR in mainloop: {e}", exc_info=True)
+                input("Press Enter to close...")
+        else:
+            logging.info("No nickname, not starting mainloop")
