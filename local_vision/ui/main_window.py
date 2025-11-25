@@ -22,6 +22,48 @@ theme = config.get('Accessibility', 'Theme', fallback='system')
 ctk.set_appearance_mode(theme)
 
 
+def make_accessible(widget, text, tts_manager=None):
+    """
+    Makes a CustomTkinter widget accessible by:
+    1. Enabling focus (takefocus=True) on internal components
+    2. Binding FocusIn event for TTS
+    3. Binding Enter (hover) event for TTS
+    """
+    if tts_manager is None:
+        from local_vision.logic.tts_manager import TTSManager
+        tts_manager = TTSManager()
+
+    try:
+        # Enable focus on the widget's internal parts
+        # This fixes the issue where CTk widgets aren't focusable by default
+        if hasattr(widget, "_canvas"):
+            widget._canvas.configure(takefocus=1)
+        if hasattr(widget, "_entry"):
+            widget._entry.configure(takefocus=1)
+        if hasattr(widget, "_textbox"):
+            widget._textbox.configure(takefocus=1)
+            
+        # Also try setting on the widget itself
+        try:
+            widget.configure(takefocus=1)
+        except:
+            pass
+
+        def on_focus(event):
+            tts_manager.speak(text)
+            
+        def on_hover(event):
+            # Speak on hover as well
+            tts_manager.speak(text)
+
+        # Bind events using add="+" to preserve existing bindings
+        widget.bind("<FocusIn>", on_focus, add="+")
+        widget.bind("<Enter>", on_hover, add="+")
+        
+    except Exception as e:
+        print(f"Error making widget accessible: {e}")
+
+
 class LoginWindow(ctk.CTkToplevel):
     """
     A window that prompts the user for a nickname.
@@ -45,11 +87,11 @@ class LoginWindow(ctk.CTkToplevel):
         self.entry.bind("<Return>", self._on_submit)
         
         # Accessibility bindings
-        self.entry.bind("<FocusIn>", lambda e: self.tts.speak("Enter your nickname"))
+        make_accessible(self.entry, "Enter your nickname", self.tts)
 
         self.button = ctk.CTkButton(self, text="Start", command=self._on_submit)
         self.button.pack(pady=10)
-        self.button.bind("<FocusIn>", lambda e: self.tts.speak("Start button"))
+        make_accessible(self.button, "Start button", self.tts)
 
         self.error_label = ctk.CTkLabel(self, text="", text_color="red")
         self.error_label.pack()
@@ -98,9 +140,11 @@ class ConfirmationDialog(ctk.CTkToplevel):
 
         self.ok_button = ctk.CTkButton(self.button_frame, text="OK", command=self.on_ok)
         self.ok_button.pack(side="left", padx=10)
+        make_accessible(self.ok_button, "OK button")
 
         self.cancel_button = ctk.CTkButton(self.button_frame, text="Cancel", command=self.on_cancel)
         self.cancel_button.pack(side="right", padx=10)
+        make_accessible(self.cancel_button, "Cancel button")
 
     def on_ok(self):
         self.result = True
@@ -160,14 +204,14 @@ class HistoryWindow(ctk.CTkToplevel):
                 command=lambda c=conv_id: self.load_selected_conversation(c)
             )
             button.pack(side="left", fill="x", expand=True, padx=(0, 5))
-            button.bind("<FocusIn>", lambda e, t=btn_text: self.main_app.tts.speak(f"Conversation: {t}"))
+            make_accessible(button, f"Conversation: {btn_text}", self.main_app.tts)
 
             delete_button = ctk.CTkButton(
                 frame, text="Delete", width=80, fg_color="red",
                 command=lambda c=conv_id: self.delete_selected_conversation(c)
             )
             delete_button.pack(side="right")
-            delete_button.bind("<FocusIn>", lambda e: self.main_app.tts.speak("Delete button"))
+            make_accessible(delete_button, "Delete conversation button", self.main_app.tts)
 
     def load_selected_conversation(self, conversation_id):
         """Tells the main app to load the selected conversation."""
@@ -211,11 +255,11 @@ class SettingsWindow(ctk.CTkToplevel):
         self.model_entry = ctk.CTkEntry(self.model_entry_frame, placeholder_text="Enter model identifier (e.g., org/repo)")
         self.model_entry.insert(0, self.main_app.model_identifier)
         self.model_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
-        self.model_entry.bind("<FocusIn>", lambda e: self.main_app.tts.speak("Model identifier input"))
+        make_accessible(self.model_entry, "Model identifier input", self.main_app.tts)
 
         self.save_model_button = ctk.CTkButton(self.model_entry_frame, text="Save", width=80, command=self.save_model_identifier)
         self.save_model_button.pack(side="left")
-        self.save_model_button.bind("<FocusIn>", lambda e: self.main_app.tts.speak("Save model button"))
+        make_accessible(self.save_model_button, "Save model button", self.main_app.tts)
 
 
         # --- Accessibility ---
@@ -229,7 +273,7 @@ class SettingsWindow(ctk.CTkToplevel):
                                             command=self.change_theme)
         self.theme_menu.set(self.main_app.theme.capitalize())
         self.theme_menu.pack(pady=10)
-        self.theme_menu.bind("<FocusIn>", lambda e: self.main_app.tts.speak("Theme menu"))
+        make_accessible(self.theme_menu, "Theme selection menu", self.main_app.tts)
 
         self.font_frame = ctk.CTkFrame(self.accessibility_frame)
         self.font_frame.pack(pady=5)
@@ -239,11 +283,11 @@ class SettingsWindow(ctk.CTkToplevel):
 
         self.decrease_font_button = ctk.CTkButton(self.font_frame, text="-", width=30, command=self.main_app.decrease_font_size)
         self.decrease_font_button.pack(side="left")
-        self.decrease_font_button.bind("<FocusIn>", lambda e: self.main_app.tts.speak("Decrease font size button"))
+        make_accessible(self.decrease_font_button, "Decrease font size button", self.main_app.tts)
 
         self.increase_font_button = ctk.CTkButton(self.font_frame, text="+", width=30, command=self.main_app.increase_font_size)
         self.increase_font_button.pack(side="left", padx=5)
-        self.increase_font_button.bind("<FocusIn>", lambda e: self.main_app.tts.speak("Increase font size button"))
+        make_accessible(self.increase_font_button, "Increase font size button", self.main_app.tts)
 
         # --- Voice Settings ---
         self.voice_frame = ctk.CTkFrame(self.accessibility_frame)
@@ -260,7 +304,7 @@ class SettingsWindow(ctk.CTkToplevel):
         else:
             self.voice_switch.deselect()
         self.voice_switch.pack(side="right", padx=5)
-        self.voice_switch.bind("<FocusIn>", lambda e: self.main_app.tts.speak("Voice toggle switch"))
+        make_accessible(self.voice_switch, "Voice toggle switch", self.main_app.tts)
 
     def toggle_voice(self):
         """Toggles the TTS engine."""
@@ -419,30 +463,30 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper):
 
         self.history_button = ctk.CTkButton(self.menu_frame, text="History", width=80, command=self._open_history)
         self.history_button.pack(side="left", padx=(0,5))
-        self.history_button.bind("<FocusIn>", lambda e: self.tts.speak("History button"))
+        make_accessible(self.history_button, "History button", self.tts)
 
         self.settings_button = ctk.CTkButton(self.menu_frame, text="Settings", width=80, command=self._open_settings)
         self.settings_button.pack(side="left")
-        self.settings_button.bind("<FocusIn>", lambda e: self.tts.speak("Settings button"))
+        make_accessible(self.settings_button, "Settings button", self.tts)
 
         self.attach_button = ctk.CTkButton(self.input_frame, text="Attach Image", width=120, command=self._on_attach_click)
         self.attach_button.grid(row=0, column=1, padx=5, pady=5, sticky="w")
-        self.attach_button.bind("<FocusIn>", lambda e: self.tts.speak("Attach Image button"))
+        make_accessible(self.attach_button, "Attach Image button", self.tts)
 
         self.paste_button = ctk.CTkButton(self.input_frame, text="Paste Image", width=120, command=self._on_paste)
         self.paste_button.grid(row=0, column=1, padx=(130, 5), pady=5, sticky="w")
-        self.paste_button.bind("<FocusIn>", lambda e: self.tts.speak("Paste Image button"))
+        make_accessible(self.paste_button, "Paste Image button", self.tts)
 
 
         self.text_input = ctk.CTkEntry(self.input_frame, placeholder_text="Type your message...")
         self.text_input.grid(row=0, column=1, sticky="ew", padx=(260, 5), pady=5)
         self.text_input.bind("<Return>", self._on_send_text)
-        self.text_input.bind("<FocusIn>", lambda e: self.tts.speak("Message input"))
+        make_accessible(self.text_input, "Message input", self.tts)
 
 
         self.send_button = ctk.CTkButton(self.input_frame, text="Send", width=80, command=self._on_send_text)
         self.send_button.grid(row=0, column=2, padx=5, pady=5)
-        self.send_button.bind("<FocusIn>", lambda e: self.tts.speak("Send button"))
+        make_accessible(self.send_button, "Send button", self.tts)
 
     def _load_config(self):
         """Loads settings from config.ini."""
@@ -707,16 +751,7 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper):
             elif actor == "system":
                 self._add_message(f"System: {content}", is_system=True)
 
-    def _bind_tts_focus(self, widget, text):
-        """Helper to bind focus events for TTS announcements."""
-        def on_focus(event):
-            self.tts.speak(text)
-        
-        # Bind to the widget
-        try:
-            widget.bind("<FocusIn>", on_focus, add="+")
-        except:
-            pass
+
 
     def _add_message(self, message, is_system=False):
         """Adds a text message to the history frame."""
@@ -740,7 +775,7 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper):
         msg_button.pack(fill="x", padx=5, pady=2)
         
         # Bind focus event to read the message
-        self._bind_tts_focus(msg_button, message)
+        make_accessible(msg_button, message, self.tts)
 
     def _add_image(self, filepath):
         """
@@ -759,7 +794,7 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper):
                 command=lambda: self.tts.speak("Image sent")
             )
             img_button.pack(padx=5, pady=5)
-            self._bind_tts_focus(img_button, "Image sent")
+            make_accessible(img_button, "Image sent", self.tts)
             return True
         else:
             # As per the sequence diagram for "falha no carregamento"
