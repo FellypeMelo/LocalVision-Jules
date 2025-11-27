@@ -49,6 +49,27 @@ class LLM_Manager:
                         continue
                 raise e
 
+    def _strip_markdown(self, text):
+        """
+        Removes Markdown formatting from the text to make it cleaner for the UI.
+        """
+        import re
+        # Remove bold/italic markers (* or _)
+        text = re.sub(r'(\*\*|__)(.*?)\1', r'\2', text)
+        text = re.sub(r'(\*|_)(.*?)\1', r'\2', text)
+        
+        # Remove code blocks
+        text = re.sub(r'```.*?```', '', text, flags=re.DOTALL)
+        text = re.sub(r'`(.*?)`', r'\1', text)
+        
+        # Remove headers
+        text = re.sub(r'^#+\s+', '', text, flags=re.MULTILINE)
+        
+        # Remove links [text](url) -> text
+        text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
+        
+        return text.strip()
+
     def get_image_description(self, image_path, result_queue):
         """
         Generates a description for an image in a separate thread.
@@ -59,13 +80,13 @@ class LLM_Manager:
                     chat = lms.Chat("You are an image analysis assistant.")
                     image_handle = self.client.prepare_image(src=image_path)
                     chat.add_user_message([
-                        "Describe this image in detail.",
+                        "Descreva esta imagem detalhadamente em português. Seja preciso e inclua detalhes visuais importantes.",
                         image_handle
                     ])
                     return self.model.respond(chat)
 
                 result = self._execute_with_retry(_task)
-                description = result.content
+                description = self._strip_markdown(result.content)
                 result_queue.put({"type": "description", "content": description})
             except Exception as e:
                 result_queue.put({"type": "error", "content": f"An unexpected error occurred: {e}"})
@@ -113,7 +134,7 @@ class LLM_Manager:
                     return self.model.respond(chat)
 
                 result = self._execute_with_retry(_task)
-                response = result.content
+                response = self._strip_markdown(result.content)
                 result_queue.put({"type": "text_response", "content": response})
             except Exception as e:
                 result_queue.put({"type": "error", "content": f"An unexpected error occurred: {e}"})

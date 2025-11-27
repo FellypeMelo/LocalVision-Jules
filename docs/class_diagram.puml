@@ -1,0 +1,159 @@
+@startuml
+
+!define ENTITY class
+
+' ===================================
+' CONFIGURAÇÕES DE APARÊNCIA
+' ===================================
+skinparam linetype ortho
+skinparam class {
+BackgroundColor #FFFDE7
+BorderColor #333333
+ArrowColor #333333
+FontSize 14
+AttributeFontSize 13
+MethodFontSize 12
+}
+skinparam note {
+BackgroundColor #FFF3E0
+BorderColor #FF9800
+FontSize 12
+}
+skinparam shadowing false
+skinparam nodesep 80
+skinparam ranksep 100
+
+' ===================================
+' CAMADA DE INTERFACE (UI)
+' ===================================
+package "UI Layer" {
+    ENTITY InterfaceGrafica {
+        - nickname: String
+        - conversation_id: Integer
+        - model_identifier: String
+        - theme: String
+        - font_size: Integer
+        --
+        + _create_widgets()
+        + _on_send_text()
+        + _process_image_submission(filepath)
+        + _check_queue()
+        + update_model_identifier(new_id)
+        + update_theme(new_theme)
+        + update_all_fonts()
+    }
+
+    ENTITY LoginWindow {
+        - nickname: String
+        --
+        + get_nickname(): String
+    }
+
+    ENTITY HistoryWindow {
+        --
+        + load_conversations()
+        + delete_selected_conversation(id)
+    }
+
+    ENTITY SettingsWindow {
+        --
+        + save_model_identifier()
+        + change_theme()
+        + toggle_voice()
+    }
+
+    ENTITY ConfirmationDialog {
+        - result: Boolean
+        --
+        + get_result(): Boolean
+    }
+}
+
+' ===================================
+' CAMADA DE LÓGICA (LOGIC)
+' ===================================
+package "Logic Layer" {
+    ENTITY LLM_Manager {
+        - client: lmstudio.Client
+        - model: lmstudio.Model
+        --
+        + get_image_description(path, queue)
+        + get_text_response(msg, history, queue)
+        - _strip_markdown(text): String
+        - _execute_with_retry(func)
+    }
+
+    ENTITY TTSManager {
+        - engine: pyttsx3.Engine
+        - is_running: Boolean
+        --
+        + speak(text, interrupt)
+        + stop()
+        + shutdown()
+        - _run_loop()
+    }
+
+    ENTITY ImageProcessor {
+        --
+        {static} + process_and_resize(path): CTkImage
+    }
+
+    ENTITY DiscordBot {
+        - token: String
+        - is_running: Boolean
+        --
+        + start_bot()
+        + stop_bot()
+        + on_message(message)
+    }
+}
+
+' ===================================
+' CAMADA DE DADOS (DATA)
+' ===================================
+package "Data Layer" {
+    ENTITY HistoryManager {
+        --
+        + create_conversation(nickname): Integer
+        + save_interaction(conv_id, actor, type, content, img)
+        + get_conversations(): List
+        + get_conversation_history(conv_id): List
+        + delete_conversation(conv_id)
+    }
+
+    ENTITY DatabaseManager {
+        - db_file: String
+        - conn: Connection
+        --
+        + connect()
+        + create_tables()
+        + execute_crud_query(query, params)
+    }
+}
+
+' ===================================
+' RELACIONAMENTOS
+' ===================================
+
+' UI Relationships
+InterfaceGrafica ..> LoginWindow : cria
+InterfaceGrafica ..> HistoryWindow : cria
+InterfaceGrafica ..> SettingsWindow : cria
+HistoryWindow ..> ConfirmationDialog : cria
+
+' UI -> Logic
+InterfaceGrafica --> LLM_Manager : usa
+InterfaceGrafica --> TTSManager : usa
+InterfaceGrafica ..> ImageProcessor : usa
+SettingsWindow ..> TTSManager : usa
+InterfaceGrafica --> DiscordBot : gerencia
+DiscordBot --> LLM_Manager : usa
+
+' UI -> Data
+InterfaceGrafica --> HistoryManager : usa
+HistoryWindow --> HistoryManager : usa
+
+' Data Relationships
+HistoryManager --> DatabaseManager : usa
+
+@enduml

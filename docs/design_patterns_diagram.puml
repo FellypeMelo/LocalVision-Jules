@@ -1,0 +1,165 @@
+@startuml
+allowmixing
+
+!define ENTITY class
+
+' ===================================
+' CONFIGURAÇÕES DE APARÊNCIA
+' ===================================
+skinparam linetype ortho
+skinparam actorStyle awesome
+skinparam class {
+BackgroundColor #FFFDE7
+BorderColor #333333
+ArrowColor #333333
+FontSize 14
+AttributeFontSize 13
+MethodFontSize 12
+}
+skinparam note {
+BackgroundColor #E3F2FD
+BorderColor #2196F3
+FontSize 12
+}
+skinparam shadowing false
+skinparam nodesep 80
+skinparam ranksep 100
+
+' ===================================
+' CAMADA DE INTERFACE (UI)
+' ===================================
+package "UI Layer" {
+    ENTITY InterfaceGrafica <<Observer>> <<Consumer>> {
+        - nickname: String
+        - conversation_id: Integer
+        - result_queue: Queue
+        --
+        + _create_widgets()
+        + _on_send_text()
+        + _check_queue()
+    }
+    note left of InterfaceGrafica
+        <b>Observer Pattern</b>
+        Widgets observam eventos
+        (FocusIn, Enter, Click)
+    end note
+
+    ENTITY LoginWindow {
+        --
+        + get_nickname()
+    }
+
+    ENTITY HistoryWindow {
+        --
+        + load_conversations()
+    }
+
+    ENTITY SettingsWindow {
+        --
+        + toggle_voice()
+    }
+    
+    note "<b>Command Pattern</b>\nBotões encapsulam ações\n(command=self.metodo)" as CommandNote
+    InterfaceGrafica .. CommandNote
+    LoginWindow .. CommandNote
+    HistoryWindow .. CommandNote
+}
+
+' ===================================
+' CAMADA DE LÓGICA (LOGIC)
+' ===================================
+package "Logic Layer" {
+    ENTITY LLM_Manager <<Facade>> <<Producer>> {
+        - client: lmstudio.Client
+        --
+        + get_text_response()
+        + get_image_description()
+    }
+    note right of LLM_Manager
+        <b>Facade Pattern</b>
+        Simplifica a complexidade
+        da API do lmstudio
+    end note
+
+    ENTITY TTSManager <<Singleton>> {
+        - {static} _instance: TTSManager
+        - engine: pyttsx3.Engine
+        --
+        + {static} __new__()
+        + speak()
+    }
+    note right of TTSManager
+        <b>Singleton Pattern</b>
+        Garante instância única
+        para controle de voz
+    end note
+
+    ENTITY ImageProcessor {
+        --
+        + process_and_resize()
+    }
+
+    ENTITY DiscordBot <<Observer>> {
+        --
+        + on_message()
+    }
+    note right of DiscordBot
+        <b>Observer Pattern</b>
+        Observa eventos do Discord
+    end note
+}
+
+' ===================================
+' CAMADA DE DADOS (DATA)
+' ===================================
+package "Data Layer" {
+    ENTITY HistoryManager {
+        --
+        + save_interaction()
+        + get_conversations()
+    }
+
+    ENTITY DatabaseManager {
+        --
+        + execute_crud_query()
+    }
+}
+
+' ===================================
+' RELACIONAMENTOS E PADRÕES
+' ===================================
+
+' UI Relationships
+InterfaceGrafica ..> LoginWindow : cria
+InterfaceGrafica ..> HistoryWindow : cria
+InterfaceGrafica ..> SettingsWindow : cria
+
+' Facade Usage
+InterfaceGrafica --> LLM_Manager : usa
+
+' Static Utility Usage
+InterfaceGrafica ..> ImageProcessor : usa
+
+' Discord Bot
+InterfaceGrafica --> DiscordBot : gerencia
+DiscordBot --> LLM_Manager : usa
+
+' Singleton Usage
+InterfaceGrafica --> TTSManager : usa
+SettingsWindow ..> TTSManager : usa
+
+' Data Usage
+InterfaceGrafica --> HistoryManager : usa
+HistoryManager --> DatabaseManager : usa
+
+' Producer-Consumer Pattern
+queue "Queue" as MsgQueue
+LLM_Manager .down.> MsgQueue : "Produz (Respostas)"
+InterfaceGrafica .up.> MsgQueue : "Consome (Updates UI)"
+note on link
+    <b>Producer-Consumer Pattern</b>
+    Desacopla processamento pesado
+    da thread da UI
+end note
+
+@enduml

@@ -59,6 +59,15 @@ def make_accessible(widget, text, tts_manager=None):
         # Bind events using add="+" to preserve existing bindings
         widget.bind("<FocusIn>", on_focus, add="+")
         widget.bind("<Enter>", on_hover, add="+")
+
+        # Key bindings for buttons (Enter and Space)
+        if isinstance(widget, ctk.CTkButton):
+            def invoke_command(event):
+                if widget._command:
+                    widget._command()
+            
+            widget.bind("<Return>", invoke_command, add="+")
+            widget.bind("<space>", invoke_command, add="+")
         
     except Exception as e:
         print(f"Error making widget accessible: {e}")
@@ -304,7 +313,58 @@ class SettingsWindow(ctk.CTkToplevel):
         else:
             self.voice_switch.deselect()
         self.voice_switch.pack(side="right", padx=5)
+        self.voice_switch.pack(side="right", padx=5)
         make_accessible(self.voice_switch, "Voice toggle switch", self.main_app.tts)
+
+        # --- Discord Settings ---
+        self.discord_frame = ctk.CTkFrame(self)
+        self.discord_frame.pack(fill="x", padx=10, pady=10)
+
+        self.discord_label = ctk.CTkLabel(self.discord_frame, text="Discord Integration")
+        self.discord_label.pack()
+
+        self.token_entry = ctk.CTkEntry(self.discord_frame, placeholder_text="Discord Bot Token")
+        self.token_entry.insert(0, self.main_app.discord_token or "")
+        self.token_entry.pack(fill="x", padx=5, pady=5)
+        make_accessible(self.token_entry, "Discord Token Input", self.main_app.tts)
+
+        self.discord_button_frame = ctk.CTkFrame(self.discord_frame, fg_color="transparent")
+        self.discord_button_frame.pack(fill="x", pady=5)
+
+        self.save_token_button = ctk.CTkButton(self.discord_button_frame, text="Save Token", width=80, command=self.save_discord_token)
+        self.save_token_button.pack(side="left", padx=5)
+        make_accessible(self.save_token_button, "Save Discord Token Button", self.main_app.tts)
+
+        self.toggle_bot_button = ctk.CTkButton(self.discord_button_frame, text="Start Bot", width=80, command=self.toggle_discord_bot)
+        self.toggle_bot_button.pack(side="right", padx=5)
+        
+        # Update button state based on bot status
+        if self.main_app.discord_bot and self.main_app.discord_bot.is_running:
+             self.toggle_bot_button.configure(text="Stop Bot", fg_color="red")
+        
+        make_accessible(self.toggle_bot_button, "Toggle Discord Bot Button", self.main_app.tts)
+
+    def save_discord_token(self):
+        token = self.token_entry.get().strip()
+        if token:
+            self.main_app.update_discord_token(token)
+            self.main_app.tts.speak("Discord token saved")
+        else:
+            self.main_app.tts.speak("Token cannot be empty")
+
+    def toggle_discord_bot(self):
+        if self.main_app.discord_bot and self.main_app.discord_bot.is_running:
+            self.main_app.stop_discord_bot()
+            self.toggle_bot_button.configure(text="Start Bot", fg_color=["#3B8ED0", "#1F6AA5"])
+            self.main_app.tts.speak("Discord bot stopped")
+        else:
+            if not self.main_app.discord_token:
+                self.main_app.tts.speak("Please save a token first")
+                return
+            
+            self.main_app.start_discord_bot()
+            self.toggle_bot_button.configure(text="Stop Bot", fg_color="red")
+            self.main_app.tts.speak("Discord bot started")
 
     def toggle_voice(self):
         """Toggles the TTS engine."""
@@ -401,6 +461,12 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper):
             error_msg = f"Failed to connect to LM Studio: {e}\n\nPlease ensure LM Studio is running and a model is loaded."
             self._add_message(f"System Error: {error_msg}", is_system=True)
             logging.error(f"LLM initialization error: {e}", exc_info=True)
+
+        # Discord Bot
+        self.discord_bot = None
+        self.discord_token = self.config.get('Settings', 'DiscordToken', fallback=None)
+        if self.discord_token:
+             logging.info("Discord token found in config.")
 
         # Start checking the queue
         logging.debug("Starting queue check...")
@@ -507,6 +573,8 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper):
             self.config['Accessibility'] = {}
 
         self.config['Settings']['ModelIdentifier'] = self.model_identifier
+        if self.discord_token:
+            self.config['Settings']['DiscordToken'] = self.discord_token
         self.config['Accessibility']['Theme'] = self.theme
         self.config['Accessibility']['FontSize'] = str(self.font_size)
 
@@ -530,6 +598,32 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper):
             self._add_message(f"System Error: {error_msg}", is_system=True)
             logging.error(f"Model update error: {e}")
             self.tts.speak("Failed to update model")
+
+    def update_discord_token(self, token):
+        self.discord_token = token
+        self._save_config()
+
+    def start_discord_bot(self):
+        if not self.discord_token:
+            return
+        
+        if not self.llm_manager:
+            self._add_message("System Error: Cannot start Discord bot without LLM Manager.", is_system=True)
+            return
+
+        try:
+            from local_vision.logic.discord_bot import DiscordBot
+            self.discord_bot = DiscordBot(self.discord_token, self.llm_manager)
+            self.discord_bot.start_bot()
+            self._add_message("System: Discord Bot started.", is_system=True)
+        except Exception as e:
+            self._add_message(f"System Error: Failed to start Discord Bot: {e}", is_system=True)
+
+    def stop_discord_bot(self):
+        if self.discord_bot:
+            self.discord_bot.stop_bot()
+            self.discord_bot = None
+            self._add_message("System: Discord Bot stopped.", is_system=True)
 
     def update_theme(self, new_theme):
         """Updates the theme and saves it."""
@@ -761,21 +855,23 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper):
         if is_system:
             text_color = "orange" if "Error" in message else "gray"
         
-        # Use CTkButton for accessibility
-        msg_button = ctk.CTkButton(
+        # Use CTkLabel for better text formatting (wrapping)
+        msg_label = ctk.CTkLabel(
             self.history_frame, 
             text=message, 
             anchor="w", 
-            fg_color="transparent",
-            hover_color="gray20",
+            justify="left",
+            wraplength=600, # Allow text to wrap
             text_color=text_color,
-            height=24,
-            command=lambda m=message: self.tts.speak(m)
+            # fg_color="transparent" # Default is transparent
         )
-        msg_button.pack(fill="x", padx=5, pady=2)
+        msg_label.pack(fill="x", padx=5, pady=5)
         
         # Bind focus event to read the message
-        make_accessible(msg_button, message, self.tts)
+        make_accessible(msg_label, message, self.tts)
+        
+        # Add click event to speak message (since Label doesn't have command)
+        msg_label.bind("<Button-1>", lambda e: self.tts.speak(message))
 
     def _add_image(self, filepath):
         """

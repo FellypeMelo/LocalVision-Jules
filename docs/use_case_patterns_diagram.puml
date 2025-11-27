@@ -1,0 +1,134 @@
+@startuml
+
+' Configurações de Aparência
+left to right direction
+skinparam linetype ortho
+skinparam usecase {
+BackgroundColor #E3F2FD
+BorderColor #1976D2
+ArrowColor #333333
+}
+skinparam rectangle {
+BorderColor #333333
+BackgroundColor #FFFDE7
+}
+skinparam note {
+BackgroundColor #FFF3E0
+BorderColor #FF9800
+}
+
+' Atores
+actor Usuário
+actor "Usuário Avançado" as UsuarioAvancado
+actor Sistema
+
+' Herança entre Atores
+Usuário <|-- UsuarioAvancado
+
+' Delimitação do Sistema
+rectangle "Local Vision System" {
+    
+    package "Funcionalidades do Usuário" {
+        usecase "Iniciar Sessão (UC001)" as UC001
+        usecase "Enviar Mensagem de Texto (UC003)" as UC003
+        usecase "Enviar Imagem (UC004)" as UC004
+        usecase "Selecionar Modelo Multimodal (UC006)" as UC006
+        usecase "Consultar Histórico (UC010)" as UC010
+        usecase "Excluir Conversa (UC011)" as UC011
+        usecase "Configurar Integração com Discord (UC012)" as UC012
+    }
+
+    package "Processamento do Sistema" {
+        usecase "Manter Estado da Sessão (UC002)" as UC002
+        usecase "Processar Imagem e Gerar Descrição (UC005)" as UC005
+        usecase "Lidar com Erro de Processamento (UC007)" as UC007
+        usecase "Manter Diálogo Contextual (UC008)" as UC008
+        usecase "Armazenar Interação (UC009)" as UC009
+    }
+
+    package "Mecanismos Internos (Design Patterns)" {
+        usecase "CTkButton (Command)" as PAT_CMD
+        usecase "InterfaceGrafica / DiscordBot (Observer)" as PAT_OBS
+        usecase "LLM_Manager (Facade)" as PAT_FAC
+        usecase "LLM_Manager (Producer)" as PAT_PROD
+        usecase "InterfaceGrafica (Consumer)" as PAT_CONS
+        usecase "TTSManager (Singleton)" as PAT_SGL
+    }
+}
+
+' Associações Principais (Atores -> UCs)
+Usuário -- UC001
+Usuário -- UC003
+Usuário -- UC004
+Usuário -- UC006
+Usuário -- UC010
+Usuário -- UC011
+UsuarioAvancado -- UC012
+
+Sistema -- UC002
+Sistema -- UC005
+Sistema -- UC007
+Sistema -- UC008
+Sistema -- UC009
+
+' Relações entre Casos de Uso (Includes/Extends do texto)
+UC004 ..> UC005 : <<include>>
+UC003 ..> UC008 : <<extends>>
+UC005 ..> UC008 : <<extends>>
+UC011 .up.> UC010 : <<include>>
+UC005 ..> UC007 : <<extends>> (em caso de erro)
+
+' Relações com Padrões (Como os UCs utilizam os padrões)
+
+' Command & Observer na UI
+UC003 ..> PAT_CMD : <<include>>
+UC004 ..> PAT_CMD : <<include>>
+UC006 ..> PAT_CMD : <<include>>
+UC011 ..> PAT_CMD : <<include>>
+PAT_CMD ..> PAT_OBS : <<trigger>>
+
+' Facade & Producer-Consumer no Processamento
+UC005 ..> PAT_FAC : <<include>>
+UC008 ..> PAT_FAC : <<include>>
+PAT_FAC ..> PAT_PROD : <<include>>
+Sistema -- PAT_CONS
+PAT_CONS ..> PAT_OBS : <<update UI>>
+
+' Singleton na Voz (Feedback de áudio)
+UC003 ..> PAT_SGL : <<include>> (leitura opcional)
+UC005 ..> PAT_SGL : <<include>> (leitura da descrição)
+
+' Observer no Discord
+UC012 ..> PAT_OBS : <<configure>>
+
+' Notas Explicativas dos Padrões
+note right of PAT_CMD
+  <b>Command Pattern</b>
+  Botões da UI encapsulam ações.
+end note
+
+note right of PAT_OBS
+  <b>Observer Pattern</b>
+  Widgets reagem a eventos
+  (ex: novas mensagens na fila).
+end note
+
+note right of PAT_FAC
+  <b>Facade Pattern</b>
+  LLM_Manager abstrai a
+  complexidade do backend.
+end note
+
+note right of PAT_PROD
+  <b>Producer-Consumer</b>
+  Thread de IA (Producer) vs
+  Thread de UI (Consumer).
+end note
+
+note right of PAT_SGL
+  <b>Singleton Pattern</b>
+  TTSManager garante canal
+  único de áudio.
+end note
+
+@enduml
