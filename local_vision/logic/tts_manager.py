@@ -22,6 +22,7 @@ class TTSManager:
         self.engine = None
         self.queue = queue.Queue()
         self.is_running = True
+        self.enabled = True  # Default to enabled
         self.thread = threading.Thread(target=self._run_loop, daemon=True)
         self.thread.start()
         logging.info("TTSManager initialized")
@@ -42,13 +43,11 @@ class TTSManager:
 
             logging.info("TTS: Initializing pyttsx3 engine...")
             
-            # Initialize engine in the thread that uses it
             try:
                 self.engine = pyttsx3.init()
                 self.engine.setProperty('rate', 170)
                 logging.info("TTS: Engine initialized successfully")
                 
-                # Start the event loop without blocking
                 self.engine.startLoop(False)
                 
             except Exception as e:
@@ -57,10 +56,8 @@ class TTSManager:
 
             while self.is_running:
                 try:
-                    # Pump the engine loop
                     self.engine.iterate()
                     
-                    # Check for new text
                     try:
                         text, interrupt = self.queue.get(block=False)
                         
@@ -78,14 +75,12 @@ class TTSManager:
                         self.engine.say(text)
                         
                     except queue.Empty:
-                        # No new text, just sleep a bit to prevent CPU hogging
                         import time
                         time.sleep(0.05)
                         continue
                         
                 except Exception as e:
                     logging.error(f"TTS: Error in loop: {e}", exc_info=True)
-                    # Re-initialize engine on error
                     try:
                         logging.warning("TTS: Attempting to re-initialize engine...")
                         if self.engine:
@@ -118,8 +113,10 @@ class TTSManager:
         """Queue text to be spoken."""
         if not text:
             return
+            
+        if not self.enabled:
+            return
         
-        # Check if thread is alive
         if not self.thread.is_alive():
             logging.critical("TTS: Thread is DEAD! Attempting to restart...")
             try:
@@ -131,7 +128,6 @@ class TTSManager:
 
         logging.info(f"TTS.speak() called with: '{text}' (interrupt={interrupt})")
         
-        # Clear queue if interrupting
         if interrupt:
             with self.queue.mutex:
                 self.queue.queue.clear()

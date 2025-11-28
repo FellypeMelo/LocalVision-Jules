@@ -12,7 +12,7 @@ class DiscordBot(discord.Client):
     """
     def __init__(self, token, llm_manager: LLM_Manager):
         intents = discord.Intents.default()
-        intents.message_content = True # Required to read message content and attachments
+        intents.message_content = True
         super().__init__(intents=intents)
         
         self.token = token
@@ -48,11 +48,9 @@ class DiscordBot(discord.Client):
         logging.info(f'Discord Bot connected as {self.user}')
 
     async def on_message(self, message):
-        # Ignore messages from self
         if message.author == self.user:
             return
 
-        # Check for attachments
         if message.attachments:
             for attachment in message.attachments:
                 if attachment.content_type and attachment.content_type.startswith('image/'):
@@ -61,24 +59,15 @@ class DiscordBot(discord.Client):
     async def _process_image(self, message, attachment):
         """Downloads image, gets description, and replies."""
         try:
-            # Create a temporary file
             with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as temp_file:
                 await attachment.save(temp_file.name)
                 temp_path = temp_file.name
 
-            # We need to bridge the sync LLM_Manager with async discord
-            # Since LLM_Manager uses a queue, we can't easily await it directly without refactoring.
-            # However, for this simplified version, we can use a helper to wait for the result.
-            # BUT, LLM_Manager.get_image_description puts result in a queue.
-            
-            # Let's create a temporary queue just for this request
             import queue
             temp_queue = queue.Queue()
             
-            # Request description
             self.llm_manager.get_image_description(temp_path, temp_queue)
             
-            # Wait for result (in a non-blocking way for asyncio)
             response = await self.loop.run_in_executor(None, temp_queue.get)
             
             if response['type'] == 'description':
@@ -86,7 +75,6 @@ class DiscordBot(discord.Client):
             else:
                 await message.reply(f"Erro ao analisar imagem: {response.get('content')}")
 
-            # Cleanup
             if os.path.exists(temp_path):
                 os.remove(temp_path)
 

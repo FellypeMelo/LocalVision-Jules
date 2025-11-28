@@ -76,7 +76,6 @@ class HistoryManager:
         if not as_dict:
             return history
 
-        # Convert list of tuples to list of dictionaries
         dict_history = []
         for row in history:
             dict_history.append({
@@ -98,11 +97,9 @@ class HistoryManager:
         Args:
             conversation_id (int): The ID of the conversation to delete.
         """
-        # First, delete all interactions associated with the conversation
         query_interactions = "DELETE FROM interactions WHERE conversation_id = ?"
         params = (conversation_id,)
         self.db_manager.execute_crud_query(query_interactions, params)
 
-        # Then, delete the conversation itself
         query_conversation = "DELETE FROM conversations WHERE conversation_id = ?"
         self.db_manager.execute_crud_query(query_conversation, params)

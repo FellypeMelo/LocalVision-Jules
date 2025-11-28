@@ -86,7 +86,6 @@ class DatabaseManager:
             return None
 
 if __name__ == '__main__':
-    # Example usage:
     db_manager = DatabaseManager()
     db_manager.connect()
     db_manager.create_tables()

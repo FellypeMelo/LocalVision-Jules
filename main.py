@@ -3,12 +3,10 @@ from local_vision.data.database_manager import DatabaseManager
 from local_vision.data.history_manager import HistoryManager
 
 if __name__ == "__main__":
-    # Initialize the data layer
     db_manager = DatabaseManager()
     db_manager.connect()
     db_manager.create_tables()
     history_manager = HistoryManager(db_manager)
 
-    # Pass the history manager to the UI
     app = InterfaceGrafica(history_manager)
     app.run()

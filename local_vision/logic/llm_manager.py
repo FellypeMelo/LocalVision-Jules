@@ -11,15 +11,12 @@ class LLM_Manager:
         """
         Initializes the LLM_Manager.
         """
-        # Extract host:port from base_url
-        # The SDK expects just "host:port" format
         host_port = base_url.replace("http://", "").replace("https://", "").replace("/v1", "").strip()
         
         logging.debug(f"LLM_Manager: Connecting to {host_port}")
         self.client = lms.Client(api_host=host_port)
         
         logging.debug(f"LLM_Manager: Getting model {model_identifier}")
-        # Use the convenience method which auto-discovers loaded models
         self.model = self.client.llm.model(model_identifier)
 
     def _execute_with_retry(self, func, *args, **kwargs):
@@ -33,13 +30,11 @@ class LLM_Manager:
             try:
                 return func(*args, **kwargs)
             except Exception as e:
-                # Check for connection-related errors
                 error_str = str(e).lower()
                 if "econnreset" in error_str or "connection" in error_str or "timeout" in error_str:
                     logging.warning(f"Connection error (attempt {attempt+1}/{max_retries}): {e}")
                     if attempt < max_retries - 1:
-                        time.sleep(1 * (attempt + 1)) # Exponential backoff
-                        # Try to reconnect client
+                        time.sleep(1 * (attempt + 1))
                         try:
                             host_port = self.client.api_host
                             self.client = lms.Client(api_host=host_port)
@@ -54,18 +49,14 @@ class LLM_Manager:
         Removes Markdown formatting from the text to make it cleaner for the UI.
         """
         import re
-        # Remove bold/italic markers (* or _)
         text = re.sub(r'(\*\*|__)(.*?)\1', r'\2', text)
         text = re.sub(r'(\*|_)(.*?)\1', r'\2', text)
         
-        # Remove code blocks
         text = re.sub(r'```.*?```', '', text, flags=re.DOTALL)
         text = re.sub(r'`(.*?)`', r'\1', text)
         
-        # Remove headers
         text = re.sub(r'^#+\s+', '', text, flags=re.MULTILINE)
         
-        # Remove links [text](url) -> text
         text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
         
         return text.strip()
@@ -101,36 +92,28 @@ class LLM_Manager:
         def worker():
             try:
                 def _task():
-                    # The system prompt can be set at the start
                     chat = lms.Chat("You are a helpful AI assistant.")
 
-                    # Reconstruct the chat history using the lmstudio Chat object
                     for interaction in conversation_history:
                         actor = interaction['actor']
                         content = interaction['content']
 
                         if actor == 'user':
                             if interaction['type'] == 'image':
-                                # If there's an image in the history, prepare it and add it
                                 try:
                                     image_handle = self.client.prepare_image(src=interaction['image_path'])
-                                    # The original prompt for the image might be in the 'content'
                                     prompt = content if isinstance(content, str) and content else "Here is the image again."
                                     chat.add_user_message([prompt, image_handle])
                                 except:
-                                    # Fallback if image file is missing
                                     chat.add_user_message("[Image missing] " + str(content))
                             else:
                                 chat.add_user_message(content)
                         elif actor == 'assistant':
-                            # The content of an assistant can be a description or text response
                             if interaction['type'] == 'description' or interaction['type'] == 'text_response':
                                  chat.add_assistant_response(content)
 
-                    # Add the new user message
                     chat.add_user_message(message)
 
-                    # Get the response
                     return self.model.respond(chat)
 
                 result = self._execute_with_retry(_task)
