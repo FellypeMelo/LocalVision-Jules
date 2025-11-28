@@ -1,0 +1,334 @@
+@startuml
+title UC001: Iniciar Sessão
+skinparam activity {
+  BackgroundColor #FFFDE7
+  BorderColor #333333
+  ArrowColor #333333
+}
+
+|Usuário|
+start
+:Inserir Apelido;
+:Clicar "Iniciar";
+
+|Sistema|
+:Validar Apelido;
+
+if () then (Apelido Vazio?)
+  :Exibir Erro "Apelido Inválido";
+  stop
+else (Apelido Válido)
+  :Iniciar Nova Sessão;
+  :Carregar Interface Principal;
+endif
+
+stop
+@enduml
+
+@startuml
+title UC002: Manter Estado da Sessão
+skinparam activity {
+  BackgroundColor #FFFDE7
+  BorderColor #333333
+  ArrowColor #333333
+}
+
+|Sistema|
+start
+:Inicializar Sessão;
+:Armazenar Apelido e ID em Memória;
+
+while () is (Aplicação Aberta)
+  :Associar Interações à Sessão Atual;
+endwhile (Aplicação Fechada)
+
+:Perder Estado da Sessão;
+stop
+@enduml
+
+@startuml
+title UC003: Enviar Mensagem de Texto
+skinparam activity {
+  BackgroundColor #FFFDE7
+  BorderColor #333333
+  ArrowColor #333333
+}
+
+|Usuário|
+start
+:Digitar Mensagem;
+:Clicar "Enviar";
+
+|Sistema|
+if () then (Campo Vazio?)
+  stop
+else (Texto Presente)
+  :Exibir Mensagem no Chat;
+  :Armazenar Mensagem (UC009);
+  
+  if () then (Contexto Existente?)
+    :Iniciar UC008 (Diálogo Contextual);
+  endif
+endif
+
+stop
+@enduml
+
+@startuml
+title UC004: Enviar Imagem
+skinparam activity {
+  BackgroundColor #FFFDE7
+  BorderColor #333333
+  ArrowColor #333333
+}
+
+|Usuário|
+start
+:Arrastar/Selecionar/Colar Imagem;
+
+|Sistema|
+:Validar Formato do Arquivo;
+
+if () then (Formato Inválido?)
+  :Exibir Erro "Formato não suportado";
+  :Acionar UC007 (Lidar com Erro);
+  stop
+else (Formato Válido)
+  :Exibir Feedback Visual;
+  :Iniciar Processamento (UC005);
+endif
+
+stop
+@enduml
+
+@startuml
+title UC005: Processar Imagem e Gerar Descrição
+skinparam activity {
+  BackgroundColor #FFFDE7
+  BorderColor #333333
+  ArrowColor #333333
+}
+
+|Sistema|
+start
+:Exibir "Processando...";
+:Carregar Imagem;
+:Carregar Modelo Multimodal (UC006);
+
+if () then (Erro no Modelo/Imagem?)
+  :Acionar UC007 (Lidar com Erro);
+  stop
+else (Sucesso)
+  :Gerar Descrição Textual;
+  :Exibir Descrição no Chat;
+  :Armazenar Descrição (UC009);
+  :Atualizar Contexto (UC008);
+endif
+
+stop
+@enduml
+
+@startuml
+title UC006: Selecionar Modelo Multimodal
+skinparam activity {
+  BackgroundColor #FFFDE7
+  BorderColor #333333
+  ArrowColor #333333
+}
+
+|Usuário|
+start
+:Abrir Configurações;
+:Listar Modelos Locais;
+
+if () then (Nenhum Modelo Encontrado?)
+  :Exibir "Nenhum modelo válido";
+  stop
+else (Modelos Disponíveis)
+  :Selecionar Modelo;
+  
+  |Sistema|
+  :Validar Modelo;
+  
+  if () then (Modelo Inválido?)
+    :Exibir Erro "Modelo Inválido";
+    stop
+  else (Modelo Válido)
+    :Carregar Modelo;
+    :Salvar Configuração;
+    :Exibir "Modelo Carregado";
+  endif
+endif
+
+stop
+@enduml
+
+@startuml
+title UC007: Lidar com Erro de Processamento
+skinparam activity {
+  BackgroundColor #FFFDE7
+  BorderColor #333333
+  ArrowColor #333333
+}
+
+|Sistema|
+start
+:Detectar Erro (Exceção);
+:Interromper Processamento;
+:Ocultar Indicador de Progresso;
+:Gerar Mensagem de Erro Amigável;
+:Exibir Mensagem no Chat;
+
+stop
+@enduml
+
+@startuml
+title UC008: Manter Diálogo Contextual
+skinparam activity {
+  BackgroundColor #FFFDE7
+  BorderColor #333333
+  ArrowColor #333333
+}
+
+|Sistema|
+start
+:Receber Mensagem de Texto;
+:Recuperar Contexto (Última Imagem + Histórico);
+
+if () then (Contexto Disponível?)
+  :Processar com Contexto;
+else (Sem Contexto)
+  :Processar sem Contexto Visual;
+endif
+
+:Gerar Resposta Coerente;
+:Exibir Resposta;
+:Armazenar Resposta (UC009);
+
+stop
+@enduml
+
+@startuml
+title UC009: Armazenar Interação
+skinparam activity {
+  BackgroundColor #FFFDE7
+  BorderColor #333333
+  ArrowColor #333333
+}
+
+|Sistema|
+start
+:Capturar Dados da Interação;
+:Preparar Query SQL;
+:Executar Insert no SQLite;
+
+if () then (Falha no Banco?)
+  :Registrar Erro Interno;
+else (Sucesso)
+  :Confirmar Armazenamento;
+endif
+
+stop
+@enduml
+
+@startuml
+title UC010: Consultar Histórico
+skinparam activity {
+  BackgroundColor #FFFDE7
+  BorderColor #333333
+  ArrowColor #333333
+}
+
+|Usuário|
+start
+:Acessar Menu Histórico;
+
+|Sistema|
+:Consultar Conversas no Banco;
+
+if () then (Lista Vazia?)
+  :Exibir "Nenhum histórico";
+  stop
+else (Conversas Encontradas)
+  :Exibir Lista de Conversas;
+  
+  |Usuário|
+  :Selecionar Conversa;
+  
+  |Sistema|
+  :Carregar Detalhes da Conversa;
+  :Exibir Mensagens e Imagens;
+endif
+
+stop
+@enduml
+
+@startuml
+title UC011: Excluir Conversa
+skinparam activity {
+  BackgroundColor #FFFDE7
+  BorderColor #333333
+  ArrowColor #333333
+}
+
+|Usuário|
+start
+:Selecionar Conversa(s);
+:Clicar "Excluir";
+
+|Sistema|
+:Solicitar Confirmação;
+
+|Usuário|
+if () then (Cancelar?)
+  stop
+else (Confirmar)
+  |Sistema|
+  :Executar DELETE no Banco;
+  
+  if () then (Erro no Banco?)
+    :Exibir "Falha ao excluir";
+  else (Sucesso)
+    :Remover da Lista Visual;
+    :Exibir "Conversa Excluída";
+  endif
+endif
+
+stop
+@enduml
+
+@startuml
+title UC012: Configurar Integração com Discord
+skinparam activity {
+  BackgroundColor #FFFDE7
+  BorderColor #333333
+  ArrowColor #333333
+}
+
+|Usuário|
+start
+:Acessar Configurações Avançadas;
+:Inserir Token do Bot;
+:Selecionar Canais;
+:Confirmar;
+
+|Sistema|
+:Validar Token;
+
+if () then (Token Inválido?)
+  :Exibir "Token Inválido";
+  stop
+else (Token Válido)
+  :Salvar Configurações Seguras;
+  :Iniciar Bot Discord;
+  
+  if () then (Falha na Conexão?)
+    :Exibir "Falha ao conectar";
+  else (Conectado)
+    :Iniciar Monitoramento de Canais;
+    :Exibir "Integração Configurada";
+  endif
+endif
+
+stop
+@enduml

@@ -1,0 +1,371 @@
+@startuml
+title UC001: Iniciar Sessão
+skinparam state {
+  BackgroundColor #FFFDE7
+  BorderColor #333333
+  ArrowColor #333333
+}
+
+[*] --> AguardandoApelido
+
+state AguardandoApelido {
+  [*] --> InputVazio
+  InputVazio --> InputPreenchido : Digita Apelido
+  InputPreenchido --> InputVazio : Apaga Texto
+}
+
+AguardandoApelido --> Validando : Clica "Iniciar"
+
+state Validando {
+  [*] --> VerificandoRegras
+  VerificandoRegras --> ErroValidacao : Apelido Inválido
+  VerificandoRegras --> SucessoValidacao : Apelido Válido
+}
+
+ErroValidacao --> AguardandoApelido : Exibe Erro
+SucessoValidacao --> SessaoIniciada : Cria Sessão
+
+state SessaoIniciada {
+  [*] --> CarregandoInterface
+  CarregandoInterface --> InterfacePronta
+}
+
+InterfacePronta --> [*]
+@enduml
+
+@startuml
+title UC002: Manter Estado da Sessão
+skinparam state {
+  BackgroundColor #FFFDE7
+  BorderColor #333333
+  ArrowColor #333333
+}
+
+[*] --> SemSessao
+
+state SemSessao {
+  [*] --> CriandoSessao : UC001 Sucesso
+}
+
+state SessaoAtiva {
+  [*] --> EstadoPreservado
+  
+  state EstadoPreservado {
+    :Apelido Armazenado;
+    :ID da Conversa Armazenado;
+  }
+  
+  EstadoPreservado --> EstadoPreservado : Nova Interação
+}
+
+CriandoSessao --> SessaoAtiva
+SessaoAtiva --> SemSessao : Fechar App / Crash
+@enduml
+
+@startuml
+title UC003: Enviar Mensagem de Texto
+skinparam state {
+  BackgroundColor #FFFDE7
+  BorderColor #333333
+  ArrowColor #333333
+}
+
+[*] --> Idle
+
+state Idle {
+  [*] --> AguardandoTexto
+  AguardandoTexto --> TextoDigitado : Usuário Digita
+}
+
+Idle --> Enviando : Clica "Enviar"
+
+state Enviando {
+  [*] --> ValidandoTexto
+  ValidandoTexto --> Idle : Texto Vazio
+  ValidandoTexto --> ExibindoNoChat : Texto Válido
+  
+  ExibindoNoChat --> ProcessandoContexto : Se houver contexto
+  ExibindoNoChat --> Idle : Sem contexto
+}
+
+ProcessandoContexto --> Idle : Fim Processamento
+@enduml
+
+@startuml
+title UC004: Enviar Imagem
+skinparam state {
+  BackgroundColor #FFFDE7
+  BorderColor #333333
+  ArrowColor #333333
+}
+
+[*] --> AguardandoImagem
+
+state AguardandoImagem {
+  [*] --> DragAndDrop
+  [*] --> FileDialog
+  [*] --> Clipboard
+}
+
+AguardandoImagem --> ValidandoArquivo : Imagem Recebida
+
+state ValidandoArquivo {
+  [*] --> VerificandoFormato
+  VerificandoFormato --> ErroFormato : Formato Inválido
+  VerificandoFormato --> Aceito : Formato Válido
+}
+
+ErroFormato --> AguardandoImagem : Exibe Erro
+Aceito --> ProcessandoUpload : Inicia Upload
+
+state ProcessandoUpload {
+  [*] --> ExibindoPreview
+  ExibindoPreview --> ProntoParaProcessar : UC005 Trigger
+}
+
+ProntoParaProcessar --> [*]
+@enduml
+
+@startuml
+title UC005: Processar Imagem e Gerar Descrição
+skinparam state {
+  BackgroundColor #FFFDE7
+  BorderColor #333333
+  ArrowColor #333333
+}
+
+[*] --> FilaDeProcessamento
+
+state FilaDeProcessamento {
+  [*] --> AguardandoVez
+}
+
+FilaDeProcessamento --> Processando : Inicia Job
+
+state Processando {
+  [*] --> CarregandoModelo
+  CarregandoModelo --> InferindoDescricao : Modelo OK
+  CarregandoModelo --> ErroProcessamento : Falha Modelo
+  
+  InferindoDescricao --> GerandoTexto
+  GerandoTexto --> Concluido : Sucesso
+  GerandoTexto --> ErroProcessamento : Timeout/Erro
+}
+
+ErroProcessamento --> [*] : Aciona UC007
+Concluido --> ExibindoResultado : Atualiza UI
+ExibindoResultado --> [*]
+@enduml
+
+@startuml
+title UC006: Selecionar Modelo Multimodal
+skinparam state {
+  BackgroundColor #FFFDE7
+  BorderColor #333333
+  ArrowColor #333333
+}
+
+[*] --> VisualizandoConfig
+
+state VisualizandoConfig {
+  [*] --> ListandoModelos
+  ListandoModelos --> ModeloSelecionado : Usuário Clica
+}
+
+VisualizandoConfig --> CarregandoModelo : Confirma Seleção
+
+state CarregandoModelo {
+  [*] --> ValidandoCaminho
+  ValidandoCaminho --> ErroCarga : Caminho Inválido
+  ValidandoCaminho --> InicializandoModelo : Caminho Válido
+  
+  InicializandoModelo --> ModeloPronto : Sucesso
+  InicializandoModelo --> ErroCarga : Falha Interna
+}
+
+ErroCarga --> VisualizandoConfig : Exibe Erro
+ModeloPronto --> VisualizandoConfig : Atualiza Status
+@enduml
+
+@startuml
+title UC007: Lidar com Erro de Processamento
+skinparam state {
+  BackgroundColor #FFFDE7
+  BorderColor #333333
+  ArrowColor #333333
+}
+
+[*] --> DetectandoErro
+
+state DetectandoErro {
+  [*] --> CapturandoExcecao
+  CapturandoExcecao --> ClassificandoErro
+}
+
+DetectandoErro --> TratandoErro
+
+state TratandoErro {
+  [*] --> ParandoProcessos
+  ParandoProcessos --> GerandoMensagem
+  GerandoMensagem --> ExibindoFeedback
+}
+
+ExibindoFeedback --> [*] : Retorna ao Estado Estável
+@enduml
+
+@startuml
+title UC008: Manter Diálogo Contextual
+skinparam state {
+  BackgroundColor #FFFDE7
+  BorderColor #333333
+  ArrowColor #333333
+}
+
+[*] --> AnalisandoContexto
+
+state AnalisandoContexto {
+  [*] --> BuscandoUltimaImagem
+  BuscandoUltimaImagem --> ContextoEncontrado : Imagem Existe
+  BuscandoUltimaImagem --> SemContexto : Nenhuma Imagem
+}
+
+ContextoEncontrado --> GerandoPromptContextual
+SemContexto --> GerandoPromptSimples
+
+GerandoPromptContextual --> EnviandoParaLLM
+GerandoPromptSimples --> EnviandoParaLLM
+
+state EnviandoParaLLM {
+  [*] --> AguardandoResposta
+  AguardandoResposta --> RespostaRecebida
+}
+
+RespostaRecebida --> [*]
+@enduml
+
+@startuml
+title UC009: Armazenar Interação
+skinparam state {
+  BackgroundColor #FFFDE7
+  BorderColor #333333
+  ArrowColor #333333
+}
+
+[*] --> PreparandoDados
+
+state PreparandoDados {
+  [*] --> FormatandoObjeto
+  FormatandoObjeto --> ValidandoDados
+}
+
+PreparandoDados --> Persistindo : Dados Válidos
+
+state Persistindo {
+  [*] --> AbrindoTransacao
+  AbrindoTransacao --> ExecutandoInsert
+  ExecutandoInsert --> Commit : Sucesso
+  ExecutandoInsert --> Rollback : Erro SQL
+}
+
+Commit --> [*] : Sucesso
+Rollback --> [*] : Falha Silenciosa/Log
+@enduml
+
+@startuml
+title UC010: Consultar Histórico
+skinparam state {
+  BackgroundColor #FFFDE7
+  BorderColor #333333
+  ArrowColor #333333
+}
+
+[*] --> CarregandoLista
+
+state CarregandoLista {
+  [*] --> QueryBanco
+  QueryBanco --> ListaVazia : 0 Resultados
+  QueryBanco --> ListaPreenchida : >0 Resultados
+}
+
+ListaVazia --> ExibindoMensagemVazia
+ListaPreenchida --> ExibindoLista
+
+state ExibindoLista {
+  [*] --> AguardandoSelecao
+  AguardandoSelecao --> CarregandoDetalhes : Seleciona Item
+}
+
+state CarregandoDetalhes {
+  [*] --> QueryMensagens
+  QueryMensagens --> ExibindoConversa
+}
+
+ExibindoConversa --> ExibindoLista : Voltar
+@enduml
+
+@startuml
+title UC011: Excluir Conversa
+skinparam state {
+  BackgroundColor #FFFDE7
+  BorderColor #333333
+  ArrowColor #333333
+}
+
+[*] --> SelecionadoParaExclusao
+
+state SelecionadoParaExclusao {
+  [*] --> AguardandoConfirmacao
+}
+
+SelecionadoParaExclusao --> Excluindo : Confirma
+SelecionadoParaExclusao --> Cancelado : Cancela
+
+state Excluindo {
+  [*] --> DeleteInteracoes
+  DeleteInteracoes --> DeleteConversa
+  DeleteConversa --> AtualizandoLista
+}
+
+AtualizandoLista --> [*]
+Cancelado --> [*]
+@enduml
+
+@startuml
+title UC012: Configurar Integração com Discord
+skinparam state {
+  BackgroundColor #FFFDE7
+  BorderColor #333333
+  ArrowColor #333333
+}
+
+[*] --> Configurando
+
+state Configurando {
+  [*] --> AguardandoToken
+  AguardandoToken --> TokenInserido
+}
+
+Configurando --> ValidandoToken : Salvar
+
+state ValidandoToken {
+  [*] --> VerificandoFormato
+  VerificandoFormato --> TokenInvalido : Erro
+  VerificandoFormato --> TokenValido : OK
+}
+
+TokenInvalido --> Configurando : Retry
+TokenValido --> IniciandoBot
+
+state IniciandoBot {
+  [*] --> ConectandoGateway
+  ConectandoGateway --> Conectado : Sucesso
+  ConectandoGateway --> FalhaConexao : Timeout
+}
+
+FalhaConexao --> Configurando : Retry
+Conectado --> Monitorando : Bot Ativo
+
+state Monitorando {
+  [*] --> OuvindoMensagens
+}
+@enduml

@@ -1,0 +1,309 @@
+@startuml
+title UC001: Iniciar Sessão
+actor "Usuário" as User
+participant "LoginWindow" as Login
+participant "InterfaceGrafica" as GUI
+participant "HistoryManager" as HistMgr
+participant "DatabaseManager" as DB
+
+User -> Login : Insere apelido
+User -> Login : Clica "Iniciar"
+activate Login
+
+Login -> Login : Valida apelido
+alt Apelido Válido
+    Login -> GUI : Inicia Interface(apelido)
+    activate GUI
+    GUI -> HistMgr : create_conversation(apelido)
+    activate HistMgr
+    HistMgr -> DB : INSERT conversation
+    activate DB
+    DB --> HistMgr : conversation_id
+    deactivate DB
+    HistMgr --> GUI : conversation_id
+    deactivate HistMgr
+    GUI --> Login : Sucesso
+    Login --> User : Exibe Chat Principal
+    deactivate GUI
+else Apelido Inválido
+    Login --> User : Exibe Erro "Apelido Inválido"
+end
+deactivate Login
+@enduml
+
+@startuml
+title UC002: Manter Estado da Sessão
+participant "Sistema" as Sys
+participant "InterfaceGrafica" as GUI
+
+note over Sys, GUI
+  Este caso de uso é contínuo.
+  O estado (apelido, conversation_id) é mantido
+  nos atributos da classe InterfaceGrafica.
+end note
+
+GUI -> GUI : Armazena self.nickname
+GUI -> GUI : Armazena self.conversation_id
+@enduml
+
+@startuml
+title UC003: Enviar Mensagem de Texto
+actor "Usuário" as User
+participant "InterfaceGrafica" as GUI
+participant "HistoryManager" as HistMgr
+participant "DatabaseManager" as DB
+participant "LLM_Manager" as LLM
+
+User -> GUI : Digita mensagem
+User -> GUI : Clica "Enviar"
+activate GUI
+
+GUI -> GUI : Exibe mensagem no chat
+GUI -> HistMgr : save_interaction(user, text)
+activate HistMgr
+HistMgr -> DB : INSERT interaction
+activate DB
+DB --> HistMgr : success
+deactivate DB
+deactivate HistMgr
+
+opt Se houver contexto (UC008)
+    GUI -> LLM : get_text_response(msg, history)
+    activate LLM
+    LLM --> GUI : (Processamento Assíncrono via Queue)
+    deactivate LLM
+end
+
+deactivate GUI
+@enduml
+
+@startuml
+title UC004: Enviar Imagem
+actor "Usuário" as User
+participant "InterfaceGrafica" as GUI
+participant "ImageProcessor" as ImgProc
+participant "LLM_Manager" as LLM
+
+User -> GUI : Arrastar/Selecionar Imagem
+activate GUI
+
+GUI -> ImgProc : process_and_resize(path)
+activate ImgProc
+ImgProc --> GUI : CTkImage
+deactivate ImgProc
+
+GUI -> GUI : Exibe preview da imagem
+GUI -> LLM : get_image_description(path) (UC005)
+activate LLM
+LLM --> GUI : (Processamento Assíncrono via Queue)
+deactivate LLM
+
+deactivate GUI
+@enduml
+
+@startuml
+title UC005: Processar Imagem e Gerar Descrição
+participant "LLM_Manager" as LLM
+participant "LM Studio API" as API
+participant "InterfaceGrafica" as GUI
+participant "HistoryManager" as HistMgr
+participant "TTSManager" as TTS
+
+activate LLM
+LLM -> API : Envia imagem + Prompt
+activate API
+API --> LLM : Retorna Descrição
+deactivate API
+
+LLM -> LLM : _strip_markdown(descrição)
+LLM -> GUI : Queue.put(descrição)
+deactivate LLM
+
+activate GUI
+GUI -> GUI : _check_queue()
+GUI -> GUI : Exibe descrição
+GUI -> HistMgr : save_interaction(system, descrição)
+GUI -> TTS : speak(descrição)
+deactivate GUI
+@enduml
+
+@startuml
+title UC006: Selecionar Modelo Multimodal
+actor "Usuário" as User
+participant "SettingsWindow" as Settings
+participant "InterfaceGrafica" as GUI
+participant "Config" as Config
+
+User -> Settings : Abre Configurações
+User -> Settings : Seleciona Modelo (Arquivo/Pasta)
+activate Settings
+
+Settings -> Settings : Valida Caminho
+Settings -> GUI : update_model_identifier(novo_modelo)
+activate GUI
+GUI -> Config : Salva novo modelo
+GUI --> Settings : Sucesso
+deactivate GUI
+
+Settings --> User : Confirmação "Modelo Carregado"
+deactivate Settings
+@enduml
+
+@startuml
+title UC007: Lidar com Erro de Processamento
+participant "LLM_Manager" as LLM
+participant "InterfaceGrafica" as GUI
+
+activate LLM
+alt Erro na API / Conexão
+    LLM -> LLM : Exception Capturada
+    LLM -> GUI : Queue.put("Erro: ...")
+end
+deactivate LLM
+
+activate GUI
+GUI -> GUI : _check_queue()
+GUI -> GUI : Exibe Mensagem de Erro
+deactivate GUI
+@enduml
+
+@startuml
+title UC008: Manter Diálogo Contextual
+participant "InterfaceGrafica" as GUI
+participant "LLM_Manager" as LLM
+participant "HistoryManager" as HistMgr
+participant "LM Studio API" as API
+
+GUI -> HistMgr : get_conversation_history()
+activate HistMgr
+HistMgr --> GUI : history_list
+deactivate HistMgr
+
+GUI -> LLM : get_text_response(msg, history_list)
+activate LLM
+LLM -> API : Chat Completion (com histórico)
+activate API
+API --> LLM : Resposta Contextual
+deactivate API
+
+LLM -> GUI : Queue.put(resposta)
+deactivate LLM
+
+activate GUI
+GUI -> GUI : Exibe resposta
+deactivate GUI
+@enduml
+
+@startuml
+title UC009: Armazenar Interação
+participant "InterfaceGrafica" as GUI
+participant "HistoryManager" as HistMgr
+participant "DatabaseManager" as DB
+
+GUI -> HistMgr : save_interaction(actor, type, content)
+activate HistMgr
+
+HistMgr -> DB : execute_crud_query(INSERT ...)
+activate DB
+DB -> DB : Commit
+DB --> HistMgr : success
+deactivate DB
+
+HistMgr --> GUI : success
+deactivate HistMgr
+@enduml
+
+@startuml
+title UC010: Consultar Histórico
+actor "Usuário" as User
+participant "HistoryWindow" as HistWin
+participant "HistoryManager" as HistMgr
+participant "DatabaseManager" as DB
+
+User -> HistWin : Abre Histórico
+activate HistWin
+HistWin -> HistMgr : get_conversations()
+activate HistMgr
+HistMgr -> DB : SELECT * FROM conversations
+activate DB
+DB --> HistMgr : lista_conversas
+deactivate DB
+HistMgr --> HistWin : lista_conversas
+deactivate HistMgr
+
+HistWin -> User : Exibe Lista
+User -> HistWin : Seleciona Conversa
+HistWin -> HistMgr : get_conversation_history(id)
+activate HistMgr
+HistMgr -> DB : SELECT * FROM interactions
+activate DB
+DB --> HistMgr : historico_detalhado
+deactivate DB
+HistMgr --> HistWin : historico_detalhado
+deactivate HistMgr
+
+HistWin -> User : Exibe Mensagens da Conversa
+deactivate HistWin
+@enduml
+
+@startuml
+title UC011: Excluir Conversa
+actor "Usuário" as User
+participant "HistoryWindow" as HistWin
+participant "HistoryManager" as HistMgr
+participant "DatabaseManager" as DB
+
+User -> HistWin : Seleciona Conversa
+User -> HistWin : Clica "Excluir"
+activate HistWin
+HistWin -> User : Solicita Confirmação
+User -> HistWin : Confirma
+
+HistWin -> HistMgr : delete_conversation(id)
+activate HistMgr
+HistMgr -> DB : DELETE FROM interactions
+activate DB
+DB --> HistMgr : success
+deactivate DB
+HistMgr -> DB : DELETE FROM conversations
+activate DB
+DB --> HistMgr : success
+deactivate DB
+deactivate HistMgr
+
+HistWin -> HistWin : Atualiza Lista
+HistWin --> User : "Conversa Excluída"
+deactivate HistWin
+@enduml
+
+@startuml
+title UC012: Configurar Integração com Discord
+actor "Usuário" as User
+participant "SettingsWindow" as Settings
+participant "InterfaceGrafica" as GUI
+participant "DiscordBot" as Bot
+
+User -> Settings : Insere Token
+User -> Settings : Clica "Salvar Token"
+Settings -> GUI : update_discord_token(token)
+
+User -> Settings : Clica "Start Bot"
+activate Settings
+Settings -> GUI : start_discord_bot()
+activate GUI
+GUI -> Bot : new DiscordBot(token)
+GUI -> Bot : start_bot()
+activate Bot
+Bot -> Bot : Thread.start()
+Bot --> GUI : Bot Started
+deactivate Bot
+GUI --> Settings : Status Atualizado
+deactivate GUI
+Settings --> User : "Bot Iniciado"
+deactivate Settings
+
+note right of Bot
+  O Bot roda em thread separada
+  e observa mensagens (Observer)
+end note
+@enduml
