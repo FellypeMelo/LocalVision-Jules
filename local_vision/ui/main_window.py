@@ -251,8 +251,6 @@ class SettingsWindow(ctk.CTkToplevel):
         self.current_model_label = ctk.CTkLabel(self.model_frame, text=f"Current Model: {self.main_app.model_identifier}", wraplength=480)
         self.current_model_label.pack(pady=5)
 
-        self.current_model_label.pack(pady=5)
-
         self.model_entry_frame = ctk.CTkFrame(self.model_frame)
         self.model_entry_frame.pack(pady=10, fill="x", padx=10)
 
@@ -264,10 +262,6 @@ class SettingsWindow(ctk.CTkToplevel):
         self.save_model_button = ctk.CTkButton(self.model_entry_frame, text="Save", width=80, command=self.save_model_identifier)
         self.save_model_button.pack(side="left")
         make_accessible(self.save_model_button, "Save model button", self.main_app.tts)
-
-
-        make_accessible(self.save_model_button, "Save model button", self.main_app.tts)
-
 
         self.accessibility_frame = ctk.CTkFrame(self)
         self.accessibility_frame.pack(fill="x", padx=10, pady=10)
@@ -295,8 +289,6 @@ class SettingsWindow(ctk.CTkToplevel):
         self.increase_font_button.pack(side="left", padx=5)
         make_accessible(self.increase_font_button, "Increase font size button", self.main_app.tts)
 
-        make_accessible(self.increase_font_size_button, "Increase font size button", self.main_app.tts)
-
         self.voice_frame = ctk.CTkFrame(self.accessibility_frame)
         self.voice_frame.pack(pady=10, fill="x")
         
@@ -310,9 +302,6 @@ class SettingsWindow(ctk.CTkToplevel):
         else:
             self.voice_switch.deselect()
         self.voice_switch.pack(side="right", padx=5)
-        self.voice_switch.pack(side="right", padx=5)
-        make_accessible(self.voice_switch, "Voice toggle switch", self.main_app.tts)
-
         make_accessible(self.voice_switch, "Voice toggle switch", self.main_app.tts)
 
         self.discord_frame = ctk.CTkFrame(self)
@@ -334,8 +323,6 @@ class SettingsWindow(ctk.CTkToplevel):
         make_accessible(self.save_token_button, "Save Discord Token Button", self.main_app.tts)
 
         self.toggle_bot_button = ctk.CTkButton(self.discord_button_frame, text="Start Bot", width=80, command=self.toggle_discord_bot)
-        self.toggle_bot_button.pack(side="right", padx=5)
-        
         self.toggle_bot_button.pack(side="right", padx=5)
         
         if self.main_app.discord_bot and self.main_app.discord_bot.is_running:
