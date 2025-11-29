@@ -773,45 +773,6 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper):
         HistoryWindow(self, self.history_manager)
 
     def _open_settings(self):
-        """Opens the settings window."""
-        SettingsWindow(self)
-
-    def load_conversation_history(self, conversation_id):
-        """Loads and displays a selected conversation from history."""
-        # Clear the current chat display
-        for widget in self.history_frame.winfo_children():
-            widget.destroy()
-
-        self.conversation_id = conversation_id
-        interactions = self.history_manager.get_conversation_history(conversation_id)
-
-        # Get the nickname for this historic conversation
-        conv_details = [c for c in self.history_manager.get_conversations() if c[0] == conversation_id]
-        historic_nickname = conv_details[0][2] if conv_details else "user"
-
-
-        for interaction in interactions:
-            actor = interaction[3]
-            interaction_type = interaction[4]
-            content = interaction[5]
-            image_path = interaction[6]
-
-            if actor == "user":
-                if interaction_type == "text":
-                    self._add_message(f"{historic_nickname}: {content}")
-                elif interaction_type == "image":
-                    self._add_message(f"{historic_nickname} (image):")
-                    self._add_image(image_path)
-            elif actor == "system":
-                self._add_message(f"System: {content}", is_system=True)
-
-
-
-    def _add_message(self, message, is_system=False):
-        """Adds a text message to the history frame."""
-        # Determine colors based on system/user
-        text_color = None
-        
         if is_system:
             text_color = "orange" if "Error" in message else "gray"
         
